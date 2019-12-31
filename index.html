@@ -24,9 +24,48 @@ html,body{
 	background-repeat:no-repeat !important;
 	background-size: 100% 100% !important;
 }
-input[type="file"]{
-	max-width: 73px;
+
+button, input[type='button'], .filebox label{
+  display: inline-block;
+  padding: .5em;
+	margin: .1em 0 0 .1em;
+  color: #fff;
+  font-size: inherit;
+  line-height: normal;
+  vertical-align: middle;
+  background-color: #5cb85c;
+  cursor: pointer;
+  border: 1px solid #4cae4c;
+  border-radius: 5%;
+  -webkit-transition: background-color 0.2s;
+  transition: background-color 0.2s;
 }
+
+
+.filebox{
+	display: inline-block;
+}
+
+.filebox label:hover {
+  background-color: #6ed36e;
+}
+
+.filebox label:active {
+  background-color: #367c36;
+}
+
+.filebox input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+
 selectbox{
 	position:absolute;left:0;top:0;width:100px;height:100px;
 }
@@ -205,7 +244,7 @@ Audio.prototype.isPlaying=function(){return !this.paused}
 var SBOX=SBOX||{};
 SBOX.style="";//"selectbox{position:absolute;left:0;top:0;width:100px;height:100px;background:blue}selectbox[class='active']{border: 1px dashed #3728ff;cursor: move;}selectbox[class='active'] scale{width:98%;height:98%;margin:auto;cursor:grabbing;display:block;position:relative;margin-top:-100%;}";
 SBOX._style=document.head.C("style");
-SBOX.init=function(){//최초한번
+SBOX.init=function(options){//최초한번
 	//document.head.C("style").innerHTML="selectbox{position:absolute;left:0;top:0;width:100px;height:100px;background:blue}";
 	var tag =[].slice.call(document.getElementsByTagName("selectbox"));
 	if (tag)tag.forEach(function(ele){
@@ -213,12 +252,16 @@ SBOX.init=function(){//최초한번
 			SBOX.append(ele);
 	});
 	SBOX._style.innerHTML=SBOX.style;
+	SBOX.setup = {
+		targets: document.get('#main_video')
+	};
 };
+console.log(SBOX.setup);
 SBOX.stack=[];
 SBOX.create=function(tag){
 	var ele=document.createElement("selectbox"),
 		sub=document.createElement(tag);
-	document.body.appendChild(ele);
+	SBOX.setup.targets.appendChild(ele);
 	ele.insertAt(sub);
 	ele.C("view");//아이템 보호
 	SBOX.append(ele);
@@ -236,6 +279,7 @@ SBOX.append=function(ele){
 	ele.isMove=false;//
 	var scale=ele.C("scale");// 스케일 셀렉트
 	ele._sub=scale;
+	// ele._exit=ele.C("exit")
 	SBOX.onadd&&SBOX.onadd.call(ele);
 	return ele;
 }
@@ -285,7 +329,10 @@ SBOX.event=function(event){//선택된 항목
 };
 SBOX.onadd=null;
 //======================================셀렉트 박스=============================
-document.addEventListener("DOMContentLoaded", SBOX.init);
+document.addEventListener("DOMContentLoaded", function(){
+	 SBOX.init();
+	 LIST_ITEM.init();
+});
 function getFile(e,func){
 	if(!e.target.files[0])return;
 	var file=e.target.files[0];
@@ -310,6 +357,7 @@ function addSBOX(e,t,name){
 	if(t==="canvas"){
 		VISUALIZER.create(ele,name);
 	}
+	LIST_ITEM.append([ele,t,name,t]);
 }
 //======================================버츄얼 라이져============================
 var VISUALIZER=VISUALIZER||{};
@@ -318,9 +366,13 @@ VISUALIZER.setup={
 	controls:false,
 	loop:true,
 	volume:0.5,
-	autoplay:true
+	autoplay:true,
+	maxSize: 32, // using to 32bit bit 연산
+	index: 0
 };
 VISUALIZER.create=function(canvas,name){
+	if(VISUALIZER.setup.index>=VISUALIZER.setup.maxSize)return;
+	var i = ++VISUALIZER.setup.index;//id 선정
 	var obj={
 		audio:new Audio(),
 		//canvas:null,
@@ -328,7 +380,7 @@ VISUALIZER.create=function(canvas,name){
 		//ctx:null,
 		//fbc_array:null,
 		//gradient:null
-	}
+	};
 	obj.name=name;
 	obj.audio.src=canvas.src;
 	obj.canvas=canvas;
@@ -342,17 +394,19 @@ VISUALIZER.create=function(canvas,name){
 	obj.gradient.addColorStop(1,'#c8c2b4');
 	obj.fbc_array = new Uint8Array(obj.analyser.frequencyBinCount);//고속처리를 위한 배열 생성
 	obj.ctx.fillStyle=obj.gradient;
-	obj.audio.oncanplay=VISUALIZER._Looper;
+	if(VISUALIZER.setup.autoplay)obj.audio.oncanplay=VISUALIZER._Looper;
 	//초기셋팅
-
+	return {index : i,play:function(){
+		obj.audio.paused?obj.audio.pause():obj.audio.play();
+		VISUALIZER.Looper.call(obj);
+	}};
 };
-VISUALIZER.remove=function(){
+VISUALIZER.remove=function(index){
 
 };
 VISUALIZER.onchange=function(index,val){
 	console.log(index+"/"+val);
 };
-VISUALIZER.onadd;
 VISUALIZER.getItemElement=function(index){
 	if(index<0||VISUALIZER.stack.length<=index)return null;
 	var root=document.createElement("div"),obj=VISUALIZER.stack[index];
@@ -362,7 +416,7 @@ VISUALIZER.getItemElement=function(index){
 	obj.ele=root;
 	return root;
 };
-VISUALIZER._Looper=function(){
+VISUALIZER.pause_all=function(){
 	var run=0;
 	VISUALIZER.stack.forEach(function(obj){
 		if(!obj.audio.paused){
@@ -373,7 +427,14 @@ VISUALIZER._Looper=function(){
 	VISUALIZER.running=run;
 	if(run)window.requestAnimationFrame(VISUALIZER._Looper);
 }
+
 VISUALIZER.play=function(){
+	if(!VISUALIZER.running)
+		VISUALIZER._Looper();
+	else console.log("실행중"+VISUALIZER.running);
+	console.log(this);
+}
+VISUALIZER.play_all=function(){
 	if(!VISUALIZER.running)
 		VISUALIZER._Looper();
 	else console.log("실행중"+VISUALIZER.running);
@@ -389,54 +450,78 @@ VISUALIZER.Looper=function(){
 };
 //======================================버츄얼 라이져============================
 
-LIST_ITEM = LIST_ITEM || {};
+var LIST_ITEM = LIST_ITEM || {};
+LIST_ITEM.list = [];
 LIST_ITEM.setup = {
 	width : 3,
-	max: 10
-}
+	max: 10,
+	target:0
+};
+
+
+LIST_ITEM.init = function(){
+	LIST_ITEM.setup.target = document.get("#list_item");
+};
+
+LIST_ITEM.append = function(a){
+	var tr = LIST_ITEM.setup.target.C("tr");
+	var obj = 0;
+	for (var index in a){
+		console.log(a[index]);
+		if (index==3){
+			if(a[index] == 'canvas')
+				tr.C("td").innerHTML = "?";
+			else tr.C("td").append(a[0].cloneNode().css({width: '50px',height:'50px'}));
+		}else if(typeof a[index] == 'string')
+			tr.C("td").innerHTML = a[index];
+		else obj = a[index];
+	}
+	LIST_ITEM.list.push([tr,obj]);
+};
 
 function background_toggle(c){
 	console.log(c);
 	document.getElementById("background_add").style="display:"+(c?"none;":"inline-block;");
 	document.getElementById("background_color").style="display:"+(c?"inline-block;":"none;");
-}
+};
 
 function hasGetUserMedia() {
   return !!(navigator.mediaDevices &&
     navigator.mediaDevices.getUserMedia);
-}
+};
 
 if (hasGetUserMedia()) {
   // Good to go!
 } else {
   alert('getUserMedia() is not supported by your browser');
-}
+};
 
 </script>
 <div id="main_video"></div><!-- 매인 비디오 영역 -->
-아이템 불러오기<input type=file id=add onchange="getFile.call(this,event,addSBOX)">
+<div class="filebox">
+  <label for="add">업로드</label>
+  <input type=file id=add onchange="getFile.call(this,event,addSBOX)">
+</div>
+<!-- 아이템 불러오기<input type=file id=add onchange="getFile.call(this,event,addSBOX)"> -->
 <input type='button' value='항목선택해제' onclick="SBOX.select(-1)">
-<input type=button value="음원싱크 시도" onclick="VISUALIZER.play()">
+<input type=button value="음원 전부 중지" onclick="VISUALIZER.stop()">
 <br>배경<label class="switch">
   <input type="checkbox" onclick="background_toggle(this.checked)">
   <span class="slider round"></span>
 </label>
-<input type=file id=background_add onchange="getFile(event,function(e){document.getElementById('main_video').style.background='url('+e.target.result+')';})">
+<!-- <input type=file id=background_add onchange="getFile(event,function(e){document.getElementById('main_video').style.background='url('+e.target.result+')';})"> -->
+<div class="filebox" id=background_add>
+  <label for="add">업로드</label>
+  <input type=file id=add onchange="getFile(event,function(e){document.getElementById('main_video').style.background='url('+e.target.result+')';})">
+</div>
 <input type=color id=background_color onchange="document.getElementById('main_video').style.background=this.value;console.log(this.value)" value="#0003" style="display:none;" >
 <br/>
 <table style="border: 1px dashed #3728ff;">
-	<tr>
-		<td>항목</td><td>경로</td><td>옵션</td>
-	</tr>
-	<tr>
-		<td><ul id="list_item">
-				<!--li>???</li-->
-		</ul></td>
-		<td><ul id="list_dir">
-				<!--li>???</li-->
-		</ul></td>
-		<td><ul id="list_option">
-				<!--li>???</li-->
-		</ul></td>
-	</tr>
+	<thead>
+		<tr>
+			<td>항목</td><td>경로</td><td>옵션</td>
+		</tr>
+	</thead>
+	<tbody id=list_item>
+	</tbody>
 </table>
